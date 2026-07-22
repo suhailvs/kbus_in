@@ -7,11 +7,24 @@
   <meta name="description" content="Track KSRTC buses live across Kerala. Real-time bus locations, routes, and schedules for Kerala State Road Transport Corporation." />
   <link rel="canonical" href="https://yourdomain.com/" />
 
+  <!-- Redirect logged-in users to /map before anything renders -->
+  <script>
+    (function () {
+      try {
+        var token = localStorage.getItem('user'); // use your actual key name
+        if (token) {
+          window.location.replace('/map');
+        }
+      } catch (e) {
+        // localStorage may throw in some privacy modes — fail open, show static page
+      }
+    })();
+  </script>
   <meta property="og:title" content="Kerala KSRTC Live Bus Tracking" />
   <meta property="og:description" content="Real-time KSRTC bus tracking across Kerala." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://yourdomain.com/" />
-
+  
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
