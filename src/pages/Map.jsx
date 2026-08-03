@@ -1,89 +1,80 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import { GoogleMap, useJsApiLoader, OverlayView, Circle } from '@react-google-maps/api';
 import './Map.css';
 
 const INIT_CENTER = { lat: 10.59975, lng: 76.45969 };
 const GOOGLE_MAPS_API_KEY = "AIzaSyBwFTs8_ByftQEytonOPdVpdV9N0uyi3h4";
+const CENTER_STORAGE_KEY = 'map:lastCenter';
 
-// Custom overlay class — draws a bus label on the map and navigates to the
-// route detail page when clicked.
-//
-// IMPORTANT: this must NOT be a top-level `class ... extends google.maps.OverlayView`,
-// because that line would evaluate `google.maps.OverlayView` as soon as this module
-// is imported — before the Maps script has loaded — throwing
-// "ReferenceError: google is not defined". Instead we build the class lazily,
-// inside a factory that's only called after loadGoogleMapsScript() resolves.
-let BusLabelOverlay = null;
-function getBusLabelOverlayClass() {
-  if (BusLabelOverlay) return BusLabelOverlay;
-
-  BusLabelOverlay = class extends google.maps.OverlayView {
-    constructor(pos, text, routeId, vehicleId, onSelect) {
-      super();
-      this.pos = pos;
-      this.text = text;
-      this.routeId = routeId;
-      this.vehicleId = vehicleId;
-      this.onSelect = onSelect;
-      this.div = null;
-    }
-
-    onAdd() {
-      const div = document.createElement('div');
-      div.className = 'bus-label';
-      div.textContent = `🚌 ${this.text}`;
-      div.addEventListener('click', () => this.onSelect(this.routeId, this.vehicleId));
-      this.div = div;
-      this.getPanes()?.floatPane.appendChild(div);
-    }
-
-    draw() {
-      const projection = this.getProjection();
-      if (!projection || !this.div) return;
-      const point = projection.fromLatLngToDivPixel(this.pos);
-      if (point) {
-        this.div.style.left = `${point.x - this.div.offsetWidth / 2}px`;
-        this.div.style.top = `${point.y - 40}px`;
-      }
-    }
-
-    onRemove() {
-      this.div?.remove();
-      this.div = null;
-    }
-  };
-
-  return BusLabelOverlay;
+// Persisted in sessionStorage so panning survives navigating away to
+// /route/:id and back (component unmounts/remounts), and even a page
+// reload within the same tab — without leaking across separate visits.
+function readStoredCenter() {
+  try {
+    const raw = sessionStorage.getItem(CENTER_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.lat === 'number' && typeof parsed?.lng === 'number') return parsed;
+    return null;
+  } catch {
+    return null;
+  }
+}
+function writeStoredCenter(center) {
+  try {
+    sessionStorage.setItem(CENTER_STORAGE_KEY, JSON.stringify(center));
+  } catch {
+    // ignore quota/private-mode errors
+  }
 }
 
-// Loads the Google Maps script once and reuses it across mounts/route changes.
-let mapsScriptPromise = null;
-function loadGoogleMapsScript() {
-  if (window.google?.maps) return Promise.resolve();
-  if (mapsScriptPromise) return mapsScriptPromise;
+const mapContainerStyle = { width: '100%', height: '100%' };
 
-  mapsScriptPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&v=weekly`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Google Maps script'));
-    document.head.appendChild(script);
-  });
+const mapOptions = {
+  disableDefaultUI: true,
+  gestureHandling: 'greedy',
+  styles: [
+    { featureType: 'water', elementType: 'geometry.fill', stylers: [{ color: '#a8d4f5' }] },
+    { featureType: 'landscape', elementType: 'geometry.fill', stylers: [{ color: '#e8edf0' }] },
+    { featureType: 'road', elementType: 'geometry.fill', stylers: [{ color: '#ffffff' }] },
+    { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#d0d0d0' }] },
+    { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
+  ],
+};
 
-  return mapsScriptPromise;
-}
+const circleOptions = {
+  strokeColor: '#888888',
+  strokeOpacity: 0.7,
+  strokeWeight: 1.5,
+  fillColor: '#aaaaaa',
+  fillOpacity: 0.18,
+  clickable: false,
+};
+
+// Google Maps API only accepts a stable, module-level array/object reference
+// for `libraries` — inline arrays cause needless script reloads.
+const MAP_LIBRARIES = [];
 
 export default function MapPage() {
   const navigate = useNavigate();
-  const mapDivRef = useRef(null);
   const mapRef = useRef(null);
-  const circleRef = useRef(null);
-  const labelOverlaysRef = useRef([]);
 
+  // Stable across re-renders — GoogleMap only needs the center ONCE on mount;
+  // after that, panning is tracked separately via `center` state below and
+  // we don't want to feed a changing prop back in and fight the user's pan.
+  const initialCenterRef = useRef(readStoredCenter() || INIT_CENTER);
+
+  const [center, setCenter] = useState(initialCenterRef.current);
+  const [buses, setBuses] = useState([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [mapReady, setMapReady] = useState(false);
+
+  const { isLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    libraries: MAP_LIBRARIES,
+  });
 
   const handleBusSelect = useCallback(
     (routeId, vehicleId) => {
@@ -92,118 +83,100 @@ export default function MapPage() {
     [navigate]
   );
 
+  const onLoad = useCallback((map) => {
+    mapRef.current = map;
+  }, []);
+
+  const onUnmount = useCallback(() => {
+    mapRef.current = null;
+  }, []);
+
+  // Keeps the search-radius circle centered as the user pans the map,
+  // same behavior as the original center_changed listener.
+  const onCenterChanged = useCallback(() => {
+    if (!mapRef.current) return;
+    const c = mapRef.current.getCenter();
+    if (!c) return;
+    const next = { lat: c.lat(), lng: c.lng() };
+    setCenter(next);
+    writeStoredCenter(next);
+  }, []);
+
   const refreshBuses = useCallback(async () => {
     if (!mapRef.current) return;
     setIsRefreshing(true);
 
-    const center = mapRef.current.getCenter();
-    if (!center) {
+    const c = mapRef.current.getCenter();
+    if (!c) {
       setIsRefreshing(false);
       return;
     }
 
     try {
-      const response = await fetch('https://chalo.com/app/api/nearbybus/v2/city/PALAKKAD', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const { data } = await axios.post(
+        'https://chalo.com/app/api/nearbybus/v2/city/PALAKKAD',
+        {
           metaData: { source: 'web' },
           requiredFields: {
             nearbyBuses: {
-              lat: center.lat().toFixed(6),
-              lng: center.lng().toFixed(6),
+              lat: c.lat().toFixed(6),
+              lng: c.lng().toFixed(6),
               radius: 1000,
             },
             cardsInfo: {},
           },
-        }),
-      });
+        },
+        { headers: { 'Content-Type': 'application/json' } }
+      );
 
-      if (!response.ok) throw new Error(`Request failed: ${response.status}`);
-      const data = await response.json();
-
-      // Clear old overlays before drawing new ones
-      labelOverlaysRef.current.forEach((overlay) => overlay.setMap(null));
-      labelOverlaysRef.current = [];
-
-      const OverlayClass = getBusLabelOverlayClass();
-      data.buses.forEach((bus) => {
-        const overlay = new OverlayClass(
-          new google.maps.LatLng(bus.parameters.lat, bus.parameters.lon),
-          bus.session._routeName,
-          bus.session._routeId,
-          bus.session._vehicleId,
-          handleBusSelect
-        );
-        overlay.setMap(mapRef.current);
-        labelOverlaysRef.current.push(overlay);
-      });
+      setBuses(data.buses ?? []);
     } catch (err) {
       console.error('Failed to refresh buses:', err);
     } finally {
       setIsRefreshing(false);
     }
-  }, [handleBusSelect]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    loadGoogleMapsScript().then(() => {
-      if (cancelled || !mapDivRef.current) return;
-
-      const map = new google.maps.Map(mapDivRef.current, {
-        center: INIT_CENTER,
-        zoom: 14,
-        disableDefaultUI: true,
-        gestureHandling: 'greedy',
-        styles: [
-          { featureType: 'water', elementType: 'geometry.fill', stylers: [{ color: '#a8d4f5' }] },
-          { featureType: 'landscape', elementType: 'geometry.fill', stylers: [{ color: '#e8edf0' }] },
-          { featureType: 'road', elementType: 'geometry.fill', stylers: [{ color: '#ffffff' }] },
-          { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#d0d0d0' }] },
-          { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-        ],
-      });
-
-      const circle = new google.maps.Circle({
-        map,
-        center: INIT_CENTER,
-        radius: 1000,
-        strokeColor: '#888888',
-        strokeOpacity: 0.7,
-        strokeWeight: 1.5,
-        fillColor: '#aaaaaa',
-        fillOpacity: 0.18,
-        clickable: false,
-      });
-
-      map.addListener('center_changed', () => {
-        const c = map.getCenter();
-        if (c) circle.setCenter(c);
-      });
-
-      mapRef.current = map;
-      circleRef.current = circle;
-      setMapReady(true);
-    });
-
-    return () => {
-      cancelled = true;
-      labelOverlaysRef.current.forEach((overlay) => overlay.setMap(null));
-      labelOverlaysRef.current = [];
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  if (!isLoaded) {
+    return <div id="map-wrapper" />;
+  }
 
   return (
     <div id="map-wrapper">
-      <div id="map" ref={mapDivRef} />
+      <GoogleMap
+        mapContainerStyle={mapContainerStyle}
+        center={initialCenterRef.current}
+        zoom={14}
+        options={mapOptions}
+        onLoad={onLoad}
+        onUnmount={onUnmount}
+        onCenterChanged={onCenterChanged}
+      >
+        <Circle center={center} radius={1000} options={circleOptions} />
+
+        {buses.map((bus) => (
+          <OverlayView
+            key={bus.session._vehicleId}
+            position={{ lat: bus.parameters.lat, lng: bus.parameters.lon }}
+            mapPaneName={OverlayView.FLOAT_PANE}
+            getPixelPositionOffset={(width, height) => ({ x: -(width / 2), y: -40 })}
+          >
+            <div
+              className="bus-label"
+              onClick={() => handleBusSelect(bus.session._routeId, bus.session._vehicleId)}
+            >
+              🚌 {bus.session._routeName}
+            </div>
+          </OverlayView>
+        ))}
+      </GoogleMap>
+
       <button
         id="refresh-btn"
         className={`btn btn-light shadow${isRefreshing ? ' loading' : ''}`}
         title="Refresh buses"
         onClick={refreshBuses}
-        disabled={!mapReady || isRefreshing}
+        disabled={!isLoaded || isRefreshing}
       >
         <svg
           className="icon-refresh"
