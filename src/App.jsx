@@ -3,6 +3,7 @@ import { useContext } from 'react';
 import Login from './pages/Login';
 import Map from './pages/Map';
 import RouteDetail from './pages/RouteDetail';
+import Settings from './pages/Settings';
 import PrivateRoute from './components/PrivateRoute';
 import { AuthContext } from './utils/AuthContext';
 
@@ -18,7 +19,9 @@ function App() {
       <Route element={<PrivateRoute />}>
           <Route path="/map" element={<Map />} />
           <Route path="/route/:routeId" element={<RouteDetail />} />
+          <Route path="/settings" element={<Settings />} />
       </Route>
+      <Route path="*" element={<Navigate to={isAuthenticated ? "/map" : "/login"} />} />
     </Routes>
   );
 }

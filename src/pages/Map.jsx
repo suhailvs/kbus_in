@@ -1,34 +1,14 @@
 import { useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { GoogleMap, useJsApiLoader, OverlayView, Circle } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, OverlayView } from '@react-google-maps/api';
+import { Sheet } from 'react-modal-sheet';
+import RouteDetail from './RouteDetail';
+import { readInitialLocation } from './Settings';
 import './Map.css';
 
 const INIT_CENTER = { lat: 10.59975, lng: 76.45969 };
 const GOOGLE_MAPS_API_KEY = "AIzaSyBwFTs8_ByftQEytonOPdVpdV9N0uyi3h4";
-const CENTER_STORAGE_KEY = 'map:lastCenter';
-
-// Persisted in sessionStorage so panning survives navigating away to
-// /route/:id and back (component unmounts/remounts), and even a page
-// reload within the same tab — without leaking across separate visits.
-function readStoredCenter() {
-  try {
-    const raw = sessionStorage.getItem(CENTER_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (typeof parsed?.lat === 'number' && typeof parsed?.lng === 'number') return parsed;
-    return null;
-  } catch {
-    return null;
-  }
-}
-function writeStoredCenter(center) {
-  try {
-    sessionStorage.setItem(CENTER_STORAGE_KEY, JSON.stringify(center));
-  } catch {
-    // ignore quota/private-mode errors
-  }
-}
 
 const mapContainerStyle = { width: '100%', height: '100%' };
 
@@ -58,48 +38,74 @@ const circleOptions = {
 const MAP_LIBRARIES = [];
 
 export default function MapPage() {
+  const mapRef = useRef(null);  
+  const circleRef = useRef(null);
   const navigate = useNavigate();
-  const mapRef = useRef(null);
+  const initialCenterRef = useRef(readInitialLocation() || INIT_CENTER);
 
-  // Stable across re-renders — GoogleMap only needs the center ONCE on mount;
-  // after that, panning is tracked separately via `center` state below and
-  // we don't want to feed a changing prop back in and fight the user's pan.
-  const initialCenterRef = useRef(readStoredCenter() || INIT_CENTER);
-
-  const [center, setCenter] = useState(initialCenterRef.current);
   const [buses, setBuses] = useState([]);
+  const [toast, setToast] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
+  const [locateError, setLocateError] = useState(null);
 
+  // Which bus's route detail is showing in the bottom sheet
+  const [sheetRoute, setSheetRoute] = useState(null); // { routeId, vehicleId } | null
+  
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
     libraries: MAP_LIBRARIES,
   });
 
-  const handleBusSelect = useCallback(
-    (routeId, vehicleId) => {
-      navigate(`/route/${routeId}/?bus=${encodeURIComponent(vehicleId)}`);
-    },
-    [navigate]
-  );
+  const handleBusSelect = useCallback((routeId, vehicleId) => {
+    setSheetRoute({ routeId, vehicleId });
+  }, []);
+
+  const closeSheet = useCallback(() => {
+    setSheetRoute(null);
+  }, []);
 
   const onLoad = useCallback((map) => {
     mapRef.current = map;
+    if (circleRef.current) {
+      // onLoad can fire more than once for the same component instance in
+      // dev (React StrictMode double-invokes mount effects). Reuse the
+      // existing circle instead of creating a second, orphaned one.
+      circleRef.current.setMap(map);
+      circleRef.current.setCenter(initialCenterRef.current);
+      return;
+    }
+    circleRef.current = new window.google.maps.Circle({
+      ...circleOptions,
+      map,
+      center: initialCenterRef.current,
+      radius: 1000,
+    });
   }, []);
 
   const onUnmount = useCallback(() => {
+    // Detach rather than destroy — if this was StrictMode's dev-only
+    // simulated unmount (not a real one), onLoad will fire again right
+    // after and reattach this same circle instance rather than us handing
+    // it a fresh one.
+    if (circleRef.current) {
+      circleRef.current.setMap(null);
+    }
     mapRef.current = null;
   }, []);
 
   // Keeps the search-radius circle centered as the user pans the map,
-  // same behavior as the original center_changed listener.
+  // same behavior as the original center_changed listener — now applied
+  // directly to the native overlay instead of going through React state.
   const onCenterChanged = useCallback(() => {
     if (!mapRef.current) return;
     const c = mapRef.current.getCenter();
     if (!c) return;
     const next = { lat: c.lat(), lng: c.lng() };
-    setCenter(next);
-    writeStoredCenter(next);
+    if (circleRef.current) {
+      circleRef.current.setCenter(next);
+    }
   }, []);
 
   const refreshBuses = useCallback(async () => {
@@ -129,13 +135,52 @@ export default function MapPage() {
         { headers: { 'Content-Type': 'application/json' } }
       );
 
-      setBuses(data.buses ?? []);
+      const nextBuses = data.buses ?? [];
+      setBuses(nextBuses);
+      if (nextBuses.length === 0) {
+        setToast('No buses found nearby');
+        setTimeout(() => setToast(null), 3000);
+      }
     } catch (err) {
       console.error('Failed to refresh buses:', err);
     } finally {
       setIsRefreshing(false);
     }
   }, []);
+
+  // Re-fetch nearby buses once the user finishes panning, rather than on
+  // every intermediate center_changed event (which fires continuously
+  // during a drag and would flood the API with requests).
+  const onDragEnd = useCallback(() => {
+    refreshBuses();
+  }, [refreshBuses]);
+
+  const goToCurrentLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setLocateError("Geolocation isn't supported on this device.");
+      return;
+    }
+    setIsLocating(true);
+    setLocateError(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        if (mapRef.current) {
+          mapRef.current.panTo(next);
+        }
+        if (circleRef.current) {
+          circleRef.current.setCenter(next);
+        }
+        setIsLocating(false);
+        refreshBuses();
+      },
+      () => {
+        setLocateError("Couldn't get your location. Check location permissions.");
+        setIsLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  }, [refreshBuses]);
 
   if (!isLoaded) {
     return <div id="map-wrapper" />;
@@ -151,9 +196,8 @@ export default function MapPage() {
         onLoad={onLoad}
         onUnmount={onUnmount}
         onCenterChanged={onCenterChanged}
+        onDragEnd={onDragEnd}
       >
-        <Circle center={center} radius={1000} options={circleOptions} />
-
         {buses.map((bus) => (
           <OverlayView
             key={bus.session._vehicleId}
@@ -170,6 +214,15 @@ export default function MapPage() {
           </OverlayView>
         ))}
       </GoogleMap>
+
+      <button
+        id="settings-btn"
+        className="btn btn-light shadow"
+        title="Settings"
+        onClick={() => navigate('/settings')}
+      >
+        <i className="ti ti-settings" style={{ fontSize: 20 }} />
+      </button>
 
       <button
         id="refresh-btn"
@@ -196,6 +249,56 @@ export default function MapPage() {
         <span className="spinner-border text-info" role="status" aria-hidden="true" />
         <span className="visually-hidden">Refreshing…</span>
       </button>
+
+      <button
+        id="locate-btn"
+        className="btn btn-light shadow"
+        title="Go to current location"
+        onClick={goToCurrentLocation}
+        disabled={isLocating}
+      >
+        {isLocating ? (
+          <span className="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true" />
+        ) : (
+          <i className="ti ti-current-location" style={{ fontSize: 20, color: '#0d6efd' }} />
+        )}
+        <span className="visually-hidden">Go to current location</span>
+      </button>
+
+      {locateError && (
+        <div id="locate-error" className="alert alert-warning py-1 px-2 shadow-sm small mb-0">
+          {locateError}
+        </div>
+      )}
+
+      {toast && (
+        <div className="position-absolute top-0 start-50 translate-middle-x mt-3 alert alert-dark py-1 px-3 shadow-sm small" style={{ zIndex: 10 }}>
+          {toast}
+        </div>
+      )}
+      <Sheet
+        isOpen={!!sheetRoute}
+        onClose={closeSheet}
+        snapPoints={[0.9, 0.5, 0.15]}
+        initialSnap={1}
+      >
+        <Sheet.Container>
+          <Sheet.Header>
+            <button
+              type="button"
+              className="btn-close position-absolute top-0 end-0 m-2"
+              aria-label="Close"
+              onClick={closeSheet}
+              onPointerDownCapture={(e) => e.stopPropagation()}
+              style={{ zIndex: 1 }}
+            />
+          </Sheet.Header>
+          <Sheet.Content>
+            {sheetRoute && <RouteDetail routeId={sheetRoute.routeId} />}
+          </Sheet.Content>
+        </Sheet.Container>
+        <Sheet.Backdrop onTap={closeSheet} />
+      </Sheet>
     </div>
   );
 }

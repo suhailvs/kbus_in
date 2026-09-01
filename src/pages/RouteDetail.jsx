@@ -67,8 +67,10 @@ function formatDuration(sec) {
   return `${h}h ${m}m`;
 }
 
-export default function RouteCard({ data }) {
-  const { routeId } = useParams();
+export default function RouteCard({ data, routeId: routeIdProp }) {
+  const params = useParams();
+  const routeId = routeIdProp ?? params.routeId;
+
   const [payload, setPayload] = useState(data || null);
   const [status, setStatus] = useState(data ? "ready" : "loading");
   const [error, setError] = useState(null);
@@ -77,7 +79,7 @@ export default function RouteCard({ data }) {
     if (data) return;
     if (!routeId) {
       setStatus("error");
-      setError("No routeId in the URL.");
+      setError("No routeId provided.");
       return;
     }
     let cancelled = false;
