@@ -8,3 +8,5 @@ cd kbus_in
 npm install
 npm run dev
 ```
+
+first time setup: `npm create vite@latest`

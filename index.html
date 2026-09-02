@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Kerala KSRTC Live Bus Tracking | Track Buses in Real Time</title>
   <meta name="description" content="Track KSRTC buses live across Kerala. Real-time bus locations, routes, and schedules for Kerala State Road Transport Corporation." />
-  <link rel="canonical" href="https://yourdomain.com/" />
+  <link rel="canonical" href="https://kbus.in/" />
 
   <!-- Redirect logged-in users to /map before anything renders -->
   <script>
     (function () {
       try {
-        var token = localStorage.getItem('user'); // use your actual key name
-        if (token) {
+        var user_state = localStorage.getItem('user_state'); // use your actual key name
+        if (user_state) {
           window.location.replace('/map');
         }
       } catch (e) {
@@ -20,35 +20,317 @@
       }
     })();
   </script>
+
   <meta property="og:title" content="Kerala KSRTC Live Bus Tracking" />
   <meta property="og:description" content="Real-time KSRTC bus tracking across Kerala." />
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://yourdomain.com/" />
-  
+  <meta property="og:url" content="https://kbus.in/" />
+
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "WebApplication",
     "name": "KSRTC Live Bus Tracking",
-    "url": "https://yourdomain.com/",
+    "url": "https://kbus.in/",
     "applicationCategory": "TravelApplication",
     "operatingSystem": "Any"
   }
   </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+    :root {
+      --bg: #F5F6F1;
+      --bg-alt: #EBEEE3;
+      --ink: #142019;
+      --ink-soft: #4B564E;
+      --teal: #0D2B2A;
+      --teal-2: #163F3D;
+      --orange: #E07A3F;
+      --orange-dark: #C4622E;
+      --green: #3F6B52;
+      --line: #D9DDD1;
+      --paper: #FFFFFF;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.5;
+    }
+    h1, h2, h3 {
+      font-family: 'Space Grotesk', 'IBM Plex Sans', sans-serif;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      margin: 0;
+      color: var(--teal);
+    }
+    a { color: inherit; text-decoration: none; }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+    /* Header */
+    .site-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--line);
+    }
+    .logo { font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 1.15rem; color: var(--teal); }
+    .logo span { color: var(--orange); }
+    .site-header nav { display: flex; align-items: center; gap: 28px; font-size: 0.92rem; }
+    .site-header nav a { color: var(--ink-soft); }
+    .site-header nav a:hover { color: var(--teal); }
+    .btn-primary {
+      background: var(--teal);
+      color: var(--paper);
+      padding: 10px 20px;
+      border-radius: 3px;
+      font-size: 0.92rem;
+      font-weight: 500;
+      display: inline-block;
+    }
+    .btn-primary:hover { background: var(--teal-2); }
+
+    /* Hero */
+    .hero { padding: 72px 24px 56px; background: linear-gradient(180deg, var(--bg) 0%, var(--bg-alt) 100%); }
+    .hero-inner { max-width: 1080px; margin: 0 auto; display: grid; grid-template-columns: 1fr; gap: 48px; }
+    .hero h1 { font-size: clamp(2rem, 4.5vw, 2.9rem); line-height: 1.12; max-width: 14ch; }
+    .hero p { margin-top: 18px; font-size: 1.05rem; color: var(--ink-soft); max-width: 46ch; }
+    .hero-ctas { margin-top: 28px; display: flex; gap: 14px; flex-wrap: wrap; }
+    .btn-secondary { padding: 10px 20px; border-radius: 3px; font-size: 0.92rem; font-weight: 500; border: 1px solid var(--line); color: var(--teal); }
+    .btn-secondary:hover { border-color: var(--teal); }
+
+    /* Route spine diagram */
+    .spine-card { background: var(--paper); border: 1px solid var(--line); border-radius: 6px; padding: 28px 24px 20px; }
+    .spine-card .label { font-size: 0.78rem; color: var(--ink-soft); margin-bottom: 18px; }
+    .spine-svg { width: 100%; height: auto; display: block; }
+    .stop-name { font-size: 0.72rem; fill: var(--ink-soft); }
+    .stop-name.live { fill: var(--orange-dark); font-weight: 600; }
+
+    /* Stats */
+    .stats { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--paper); }
+    .stats-inner { max-width: 1080px; margin: 0 auto; padding: 28px 24px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .stat b { font-family: 'Space Grotesk', sans-serif; font-size: 1.5rem; color: var(--teal); display: block; }
+    .stat span { font-size: 0.85rem; color: var(--ink-soft); }
+
+    /* Sections */
+    section.block { padding: 64px 24px; }
+    .block h2 { font-size: 1.7rem; margin-bottom: 8px; }
+    .block .lede { color: var(--ink-soft); max-width: 50ch; margin-bottom: 36px; }
+
+    /* How it works */
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+    .step .num { font-family: 'Space Grotesk', sans-serif; font-size: 0.85rem; color: var(--orange-dark); margin-bottom: 8px; }
+    .step h3 { font-size: 1.05rem; margin-bottom: 6px; }
+    .step p { color: var(--ink-soft); font-size: 0.94rem; margin: 0; }
+
+    /* Coverage */
+    .coverage-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+    .coverage-grid a { background: var(--paper); padding: 16px 18px; font-size: 0.92rem; display: flex; align-items: center; gap: 8px; }
+    .coverage-grid a:hover { background: var(--bg-alt); }
+    .coverage-grid svg { flex-shrink: 0; opacity: 0.6; }
+
+    /* Features */
+    .features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+    .feature { background: var(--paper); padding: 26px 24px; border-left: 3px solid var(--accent, var(--orange)); }
+    .feature svg { color: var(--accent, var(--orange)); margin-bottom: 12px; }
+    .feature h3 { font-size: 1.05rem; margin-bottom: 6px; }
+    .feature p { color: var(--ink-soft); font-size: 0.92rem; margin: 0; }
+
+    /* CTA banner */
+    .cta-banner { background: var(--teal); color: var(--paper); padding: 56px 24px; }
+    .cta-banner-inner { max-width: 1080px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 20px; }
+    .cta-banner h2 { color: var(--paper); font-size: 1.5rem; }
+    .cta-banner p { color: #C9D6D2; margin: 6px 0 0; }
+    .cta-banner .btn-primary { background: var(--orange); }
+    .cta-banner .btn-primary:hover { background: var(--orange-dark); }
+
+    /* Footer */
+    footer { padding: 40px 24px 32px; border-top: 1px solid var(--line); }
+    .footer-inner { max-width: 1080px; margin: 0 auto; }
+    .footer-inner p { color: var(--ink-soft); font-size: 0.86rem; max-width: 60ch; }
+    .footer-links { margin-top: 16px; display: flex; gap: 20px; font-size: 0.86rem; flex-wrap: wrap; }
+    .footer-links a { color: var(--ink-soft); }
+    .footer-links a:hover { color: var(--teal); }
+
+    @media (min-width: 760px) {
+      .hero-inner { grid-template-columns: 1.1fr 1fr; align-items: center; }
+    }
+    @media (max-width: 700px) {
+      .steps { grid-template-columns: 1fr; }
+      .features { grid-template-columns: 1fr; }
+      .stats-inner { grid-template-columns: 1fr; text-align: left; }
+      .site-header nav { display: none; }
+    }
+  </style>
 </head>
 <body>
-  <header>
-    <h1>Kerala KSRTC Live Bus Tracking</h1>
-    <nav><a href="/map">Open Live Map</a></nav>
+
+  <!-- Header -->
+  <header class="site-header">
+    <a class="logo" href="/">kbus<span>.in</span></a>
+    <nav>
+      <a href="#how-it-works">How it works</a>
+      <a href="#coverage">Coverage</a>
+      <a href="/about">About</a>
+      <a class="btn-primary" href="/map">Open live map</a>
+    </nav>
   </header>
 
   <main>
-    <section>
-      <h2>Track KSRTC Buses in Real Time</h2>
-      <p>Fully-crawlable static content describing routes, depots, popular travel corridors, etc.</p>
-      <!-- All your real content goes here, plain HTML, indexable with zero JS -->
+    <!-- Hero -->
+    <section class="hero">
+      <div class="hero-inner wrap">
+        <div>
+          <h1>Know exactly when your KSRTC bus will arrive.</h1>
+          <p>
+            Live GPS positions for KSRTC buses across Kerala. Search a route,
+            watch it move on the map, and time your walk to the stop instead
+            of guessing.
+          </p>
+          <div class="hero-ctas">
+            <a class="btn-primary" href="/map">Open live map</a>
+            <a class="btn-secondary" href="#how-it-works">See how it works</a>
+          </div>
+        </div>
+
+        <div class="spine-card">
+          <div class="label">Thiruvananthapuram – Kannur corridor, right now</div>
+          <svg class="spine-svg" viewBox="0 0 460 120" xmlns="http://www.w3.org/2000/svg">
+            <line x1="20" y1="30" x2="440" y2="30" stroke="#D9DDD1" stroke-width="2" />
+            <circle cx="20" cy="30" r="4.5" fill="#0D2B2A" />
+            <text x="20" y="54" text-anchor="middle" class="stop-name">Kannur</text>
+
+            <circle cx="104" cy="30" r="4.5" fill="#0D2B2A" />
+            <text x="104" y="54" text-anchor="middle" class="stop-name">Kozhikode</text>
+
+            <circle cx="188" cy="30" r="7" fill="#E07A3F" />
+            <text x="188" y="14" text-anchor="middle" class="stop-name live">12 min</text>
+            <text x="188" y="54" text-anchor="middle" class="stop-name live">Thrissur</text>
+
+            <circle cx="272" cy="30" r="4.5" fill="#0D2B2A" />
+            <text x="272" y="54" text-anchor="middle" class="stop-name">Ernakulam</text>
+
+            <circle cx="356" cy="30" r="4.5" fill="#0D2B2A" />
+            <text x="356" y="54" text-anchor="middle" class="stop-name">Kottayam</text>
+
+            <circle cx="440" cy="30" r="4.5" fill="#0D2B2A" />
+            <text x="440" y="54" text-anchor="middle" class="stop-name">Thiruvananthapuram</text>
+          </svg>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stats-inner">
+        <div class="stat"><b>14</b><span>districts covered</span></div>
+        <div class="stat"><b>30s</b><span>position refresh</span></div>
+        <div class="stat"><b>1000+</b><span>stops mapped</span></div>
+      </div>
+    </div>
+
+    <!-- How it works -->
+    <section class="block wrap" id="how-it-works">
+      <h2>Three steps, no app install</h2>
+      <p class="lede">Open it in your phone's browser and it works the same as an app would.</p>
+      <div class="steps">
+        <div class="step">
+          <div class="num">01</div>
+          <h3>Search your route</h3>
+          <p>Enter a route number, or just the two stops you're travelling between.</p>
+        </div>
+        <div class="step">
+          <div class="num">02</div>
+          <h3>Watch it move</h3>
+          <p>See the bus's live position on the map as it makes its way toward you.</p>
+        </div>
+        <div class="step">
+          <div class="num">03</div>
+          <h3>Time your walk</h3>
+          <p>Check the ETA at your stop and head out right before the bus does.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Coverage -->
+    <section class="block wrap" id="coverage">
+      <h2>Covering every district KSRTC serves</h2>
+      <p class="lede">Pick a district to see its live routes and depots.</p>
+      <div class="coverage-grid">
+        <a href="/routes/thiruvananthapuram"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Thiruvananthapuram</a>
+        <a href="/routes/kollam"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Kollam</a>
+        <a href="/routes/kottayam"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Kottayam</a>
+        <a href="/routes/alappuzha"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Alappuzha</a>
+        <a href="/routes/ernakulam"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Ernakulam</a>
+        <a href="/routes/thrissur"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Thrissur</a>
+        <a href="/routes/palakkad"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Palakkad</a>
+        <a href="/routes/kozhikode"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Kozhikode</a>
+        <a href="/routes/kannur"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Kannur</a>
+        <a href="/routes/kasaragod"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Kasaragod</a>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="block wrap">
+      <h2>Built around what commuters actually need</h2>
+      <p class="lede">No account, no booking flow — just the answer to "where's my bus".</p>
+      <div class="features">
+        <div class="feature" style="--accent: #E07A3F;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+          <h3>Live GPS tracking</h3>
+          <p>Positions come straight from KSRTC's own GPS feed, refreshed continually — not a fixed timetable guess.</p>
+        </div>
+        <div class="feature" style="--accent: #3F6B52;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <h3>Route &amp; stop search</h3>
+          <p>Look up any KSRTC route or stop by name, in Malayalam or English, and see every bus running on it right now.</p>
+        </div>
+        <div class="feature" style="--accent: #163F3D;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <h3>Arrival estimates that adjust</h3>
+          <p>ETAs update as the bus moves, accounting for traffic and stop delays along the way.</p>
+        </div>
+        <div class="feature" style="--accent: #C4622E;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+          <h3>No app required</h3>
+          <p>Opens straight in the browser. Built to stay usable on a slow connection, not just on 4G.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA banner -->
+    <section class="cta-banner">
+      <div class="cta-banner-inner">
+        <div>
+          <h2>Your bus is already on the map.</h2>
+          <p>Search your route and see it moving in real time.</p>
+        </div>
+        <a class="btn-primary" href="/map">Open live map</a>
+      </div>
     </section>
   </main>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-inner">
+      <p>
+        kbus.in is an independent live bus tracking service for Kerala KSRTC
+        routes. It is not officially affiliated with, or endorsed by, Kerala
+        State Road Transport Corporation.
+      </p>
+      <div class="footer-links">
+        <a href="/map">Live map</a>
+        <a href="/about">About</a>
+        <a href="/contact">Contact</a>
+        <a href="/terms">Terms</a>
+      </div>
+    </div>
+  </footer>
 
   <!-- No React bundle loaded here at all — pure static page -->
 </body>

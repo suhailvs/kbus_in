@@ -228,13 +228,8 @@ export default function RouteCard({ data, routeId: routeIdProp }) {
                     </div>
                     <div className="text-end">
                       <div className="text-secondary small font-monospace">
-                        Stop {String(i + 1).padStart(2, "0")}/{String(stops.length).padStart(2, "0")}
+                        {String(i + 1).padStart(2, "0")}
                       </div>
-                      {stop.stop_code && (
-                        <div className="text-secondary small font-monospace">
-                          Code {stop.stop_code}
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>

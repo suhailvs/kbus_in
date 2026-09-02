@@ -5,9 +5,9 @@ import RouteDetail from './pages/RouteDetail';
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<Map />} />
+      <Route path="/map" element={<Map />} />
       <Route path="/route/:routeId" element={<RouteDetail />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      {/* <Route path="*" element={<Navigate to="/" replace />} /> */}
     </Routes>
   );
 }
