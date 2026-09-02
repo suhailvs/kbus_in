@@ -26,20 +26,6 @@
   cursor: pointer;
 }
 
-#settings-btn {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  z-index: 10;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
 #locate-btn {
   position: absolute;
   right: 16px;
@@ -60,42 +46,4 @@
   bottom: 76px;
   z-index: 10;
   max-width: calc(100% - 32px);
-}
-
-#refresh-btn {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  z-index: 10;
-  width: 44px;
-  height: 44px;
-  padding: 0;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-#refresh-btn .icon-refresh,
-#refresh-btn .spinner-border {
-  position: absolute;
-  transition: opacity 0.15s;
-}
-
-#refresh-btn .icon-refresh {
-  opacity: 1;
-}
-
-#refresh-btn .spinner-border {
-  opacity: 0;
-  width: 20px;
-  height: 20px;
-}
-
-#refresh-btn.loading .icon-refresh {
-  opacity: 0;
-}
-
-#refresh-btn.loading .spinner-border {
-  opacity: 1;
 }
