@@ -1,10 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { GoogleMap, useJsApiLoader, OverlayView } from '@react-google-maps/api';
 import { Sheet } from 'react-modal-sheet';
 import RouteDetail from './RouteDetail';
-import { readInitialLocation } from './Settings';
 import './Map.css';
 
 const INIT_CENTER = { lat: 10.59975, lng: 76.45969 };
@@ -33,25 +31,21 @@ const circleOptions = {
   clickable: false,
 };
 
-// Google Maps API only accepts a stable, module-level array/object reference
-// for `libraries` — inline arrays cause needless script reloads.
 const MAP_LIBRARIES = [];
 
 export default function MapPage() {
-  const mapRef = useRef(null);  
+  const mapRef = useRef(null);
   const circleRef = useRef(null);
-  const navigate = useNavigate();
-  const initialCenterRef = useRef(readInitialLocation() || INIT_CENTER);
+  const initialCenterRef = useRef(INIT_CENTER);
 
   const [buses, setBuses] = useState([]);
   const [toast, setToast] = useState(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [locateError, setLocateError] = useState(null);
 
   // Which bus's route detail is showing in the bottom sheet
   const [sheetRoute, setSheetRoute] = useState(null); // { routeId, vehicleId } | null
-  
+
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
@@ -110,13 +104,9 @@ export default function MapPage() {
 
   const refreshBuses = useCallback(async () => {
     if (!mapRef.current) return;
-    setIsRefreshing(true);
 
     const c = mapRef.current.getCenter();
-    if (!c) {
-      setIsRefreshing(false);
-      return;
-    }
+    if (!c) return;
 
     try {
       const { data } = await axios.post(
@@ -143,8 +133,6 @@ export default function MapPage() {
       }
     } catch (err) {
       console.error('Failed to refresh buses:', err);
-    } finally {
-      setIsRefreshing(false);
     }
   }, []);
 
@@ -214,41 +202,6 @@ export default function MapPage() {
           </OverlayView>
         ))}
       </GoogleMap>
-
-      <button
-        id="settings-btn"
-        className="btn btn-light shadow"
-        title="Settings"
-        onClick={() => navigate('/settings')}
-      >
-        <i className="ti ti-settings" style={{ fontSize: 20 }} />
-      </button>
-
-      <button
-        id="refresh-btn"
-        className={`btn btn-light shadow${isRefreshing ? ' loading' : ''}`}
-        title="Refresh buses"
-        onClick={refreshBuses}
-        disabled={!isLoaded || isRefreshing}
-      >
-        <svg
-          className="icon-refresh"
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2.2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <polyline points="23 4 23 10 17 10" />
-          <polyline points="1 20 1 14 7 14" />
-          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-        </svg>
-        <span className="spinner-border text-info" role="status" aria-hidden="true" />
-        <span className="visually-hidden">Refreshing…</span>
-      </button>
 
       <button
         id="locate-btn"
